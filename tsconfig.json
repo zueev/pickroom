@@ -1,0 +1,1 @@
+{"compilerOptions":{"target":"ES2022","module":"ESNext","moduleResolution":"Bundler","jsx":"react-jsx","strict":true,"skipLibCheck":true,"esModuleInterop":true,"allowImportingTsExtensions":true,"resolveJsonModule":true,"noEmit":true,"baseUrl":".","paths":{"@/*":["./*"]}},"include":["app","components","lib","main.tsx","vite.config.ts"]}
