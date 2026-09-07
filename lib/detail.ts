@@ -4,6 +4,9 @@ export type Product = {
   title: string;
   source_url: string | null;
   vendor: string | null;
+  shop: string | null;
+  market: string | null;
+  list_rank: number | null;
   wholesale_price: number;
   sale_price: number | null;
   colors: string | null;

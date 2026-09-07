@@ -51,6 +51,9 @@ export async function POST(request: Request) {
         material?: string;
         origin?: string;
         singleBuy?: boolean;
+        shop?: string;
+        market?: string;
+        listRank?: number;
       };
     };
     const gid = String(body.gid || "").trim();
@@ -77,10 +80,16 @@ export async function POST(request: Request) {
         material: (info.material || "").trim().slice(0, 200) || null,
         origin: (info.origin || "").trim().slice(0, 60) || "대한민국",
         single_buy: typeof info.singleBuy === "boolean" ? info.singleBuy : null,
+        shop: (info.shop || "").trim().slice(0, 80) || null,
+        market: (info.market || "").trim().slice(0, 80) || null,
+        list_rank: Number.isFinite(info.listRank) ? Number(info.listRank) : null,
       };
 
       if (product) {
-        const updated = await admin.from("products").update(values).eq("id", product.id);
+        const keep = Object.fromEntries(
+          Object.entries(values).filter(([, v]) => v !== null && v !== ""),
+        );
+        const updated = await admin.from("products").update(keep).eq("id", product.id);
         if (updated.error) throw new Error(updated.error.message);
       } else {
         const created = await admin.from("products")

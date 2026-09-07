@@ -24,6 +24,24 @@ export default function Home() {
   const [loaded, setLoaded] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
   const [sheet, setSheet] = useState<{ title: string; html: string } | null>(null);
+  const [shop, setShop] = useState<string | null>(null);
+  const PER_SHOP = 15;
+
+  const shops = (() => {
+    const map = new Map<string, { shop: string; market: string; count: number; cover?: string }>();
+    products.forEach((p) => {
+      const key = p.shop || p.vendor || "기타";
+      const row = map.get(key) || { shop: key, market: p.market || "", count: 0 };
+      row.count += 1;
+      if (!row.cover) row.cover = (photos[p.id] || [])[0]?.url;
+      map.set(key, row);
+    });
+    return [...map.values()].sort((a, b) => b.count - a.count);
+  })();
+
+  const shown = shop
+    ? products.filter((p) => (p.shop || p.vendor || "기타") === shop).slice(0, PER_SHOP)
+    : [];
 
   const chosen = products.filter((p) => selected.includes(p.id));
   const current = products.find((p) => p.id === activeId) || chosen[0] || products[0];
@@ -245,126 +263,151 @@ export default function Home() {
 
         {step === 0 && (
           <>
-            <div className="section-bar">
-              <h2>가져온 옷 <span>{String(products.length).padStart(2, "0")}</span></h2>
-            </div>
+            {!shop ? (
+              <>
+                <div className="section-bar">
+                  <h2>거래처 <span>{String(shops.length).padStart(2, "0")}</span></h2>
+                </div>
 
-            {products.length === 0 ? (
-              <div className="pending-preview">
-                {!loaded ? (
-                  <b>불러오는 중</b>
-                ) : loadFailed ? (
-                  <>
-                    <b>상품을 불러오지 못했습니다</b>
-                    <span>잠깐 끊긴 것일 수 있습니다</span>
-                    <button className="primary" onClick={load} style={{ marginTop: 14, maxWidth: 200 }}>
-                      다시 불러오기
-                    </button>
-                  </>
+                {shops.length === 0 ? (
+                  <div className="pending-preview">
+                    {!loaded ? <b>불러오는 중</b> : loadFailed ? (
+                      <>
+                        <b>불러오지 못했습니다</b>
+                        <button className="primary" onClick={load} style={{ marginTop: 14, maxWidth: 200 }}>다시 불러오기</button>
+                      </>
+                    ) : (
+                      <>
+                        <b>아직 거래처가 없습니다</b>
+                        <span>신상마켓에서 상품을 가져오면 여기에 뜹니다</span>
+                      </>
+                    )}
+                  </div>
                 ) : (
-                  <>
-                    <b>아직 가져온 옷이 없습니다</b>
-                    <span>신상마켓에서 상품을 가져오면 여기에 뜹니다</span>
-                  </>
-                )}
-              </div>
-            ) : (
-              <div className="product-grid">
-                {products.map((product) => {
-                  const cover = (photos[product.id] || [])[0];
-                  const picked = selected.includes(product.id);
-                  return (
-                    <article className={"product" + (picked ? " picked" : "")} key={product.id}>
-                      <div className="product-image">
-                        {cover?.url ? (
-                          <img src={cover.url} alt={product.title} />
-                        ) : (
-                          <div
-                            style={{
-                              height: "100%", display: "flex", flexDirection: "column",
-                              justifyContent: "center", gap: 10, padding: "44px 18px 58px",
-                              textAlign: "left",
-                            }}
-                          >
-                            <strong style={{ fontSize: 15, lineHeight: 1.45, color: "var(--foreground)" }}>
-                              {cleanTitle(product.title) || product.title}
-                            </strong>
-                            <span style={{ fontSize: 13, color: "var(--muted-foreground)", lineHeight: 1.6 }}>
-                              {[product.colors, product.sizes].filter(Boolean).join(" · ")}
-                              {product.material ? <><br />{product.material}</> : null}
-                            </span>
-                            <span style={{ fontSize: 12, color: "var(--muted-foreground)", marginTop: 4 }}>
-                              실착 사진 자리
-                            </span>
-                          </div>
-                        )}
-                        <div className="check-wrap">
-                          <input
-                            type="checkbox"
-                            aria-label={`${product.title} 고르기`}
-                            checked={picked}
-                            onChange={(e) =>
-                              setSelected(e.target.checked
-                                ? [...selected, product.id]
-                                : selected.filter((id) => id !== product.id))
-                            }
-                          />
-                        </div>
-                        <span className="image-tag">
-                          {product.status === "registered" ? "등록됨" : product.single_buy ? "낱장 가능" : "낱장 불가"}
-                        </span>
+                  <div className="product-grid">
+                    {shops.map((row) => (
+                      <article className="product" key={row.shop}>
                         <button
-                          className="image-edit"
-                          onClick={() => {
-                            const html = makeDetail(product);
-                            if (html) setSheet({ title: cleanTitle(product.title) || product.title, html });
-                          }}
+                          onClick={() => { setShop(row.shop); window.scrollTo(0, 0); }}
+                          style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: 0, padding: 0 }}
                         >
-                          상세페이지 생성
+                          <div className="product-image">
+                            {row.cover ? (
+                              <img src={row.cover} alt={row.shop} />
+                            ) : (
+                              <div style={{ display: "grid", placeItems: "center", height: "100%", color: "#bbb", fontSize: 13 }}>
+                                사진 없음
+                              </div>
+                            )}
+                            <span className="image-tag">{row.count}벌</span>
+                          </div>
+                          <div className="product-info">
+                            <small>{row.market || "신상마켓"}</small>
+                            <h3>{row.shop}</h3>
+                            <p>최신 상품 보기<span>→</span></p>
+                          </div>
                         </button>
-                      </div>
-                      <div className="product-info">
-                        <small>{product.vendor || "신상마켓"}</small>
-                        <h3>{cleanTitle(product.title) || product.title}</h3>
-                        <p>
-                          {product.sale_price ? `${won.format(product.sale_price)}원` : "판매가 미설정"}
-                          <span>도매 {won.format(product.wholesale_price)}원</span>
-                        </p>
-                        <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="section-bar">
+                  <h2>
+                    {shop} <span>{String(shown.length).padStart(2, "0")}</span>
+                  </h2>
+                  <button
+                    onClick={() => setShop(null)}
+                    style={{ fontSize: 13, background: "none", border: "1px solid var(--border)", borderRadius: 999, padding: "7px 14px" }}
+                  >
+                    거래처 목록
+                  </button>
+                </div>
+
+                <div className="product-grid">
+                  {shown.map((product) => {
+                    const cover = (photos[product.id] || [])[0];
+                    const picked = selected.includes(product.id);
+                    return (
+                      <article className={"product" + (picked ? " picked" : "")} key={product.id}>
+                        <div className="product-image">
+                          {cover?.url ? (
+                            <img src={cover.url} alt={product.title} />
+                          ) : (
+                            <div style={{ height: "100%", display: "flex", flexDirection: "column", justifyContent: "center", gap: 10, padding: "44px 18px 58px", textAlign: "left" }}>
+                              <strong style={{ fontSize: 15, lineHeight: 1.45, color: "var(--foreground)" }}>
+                                {cleanTitle(product.title) || product.title}
+                              </strong>
+                              <span style={{ fontSize: 13, color: "var(--muted-foreground)", lineHeight: 1.6 }}>
+                                {[product.colors, product.sizes].filter(Boolean).join(" · ")}
+                              </span>
+                            </div>
+                          )}
+                          <div className="check-wrap">
+                            <input
+                              type="checkbox"
+                              aria-label={`${product.title} 고르기`}
+                              checked={picked}
+                              onChange={(e) =>
+                                setSelected(e.target.checked
+                                  ? [...selected, product.id]
+                                  : selected.filter((id) => id !== product.id))
+                              }
+                            />
+                          </div>
+                          <span className="image-tag">
+                            {product.status === "registered" ? "등록됨" : product.single_buy ? "낱장 가능" : "낱장 불가"}
+                          </span>
                           <button
+                            className="image-edit"
                             onClick={() => {
-                              setActiveId(product.id);
-                              if (!picked) setSelected((v) => [...v, product.id]);
-                              setStep(1);
+                              const html = makeDetail(product);
+                              if (html) setSheet({ title: cleanTitle(product.title) || product.title, html });
                             }}
-                            style={{ fontSize: 12, background: "none", border: 0, padding: 0, color: "var(--muted-foreground)", textDecoration: "underline" }}
                           >
-                            사진·문구 넣기
+                            상세페이지 생성
                           </button>
-                          {product.detail_html && (
-                            <button
-                              onClick={() => setSheet({ title: cleanTitle(product.title) || product.title, html: product.detail_html! })}
-                              style={{ fontSize: 12, background: "none", border: 0, padding: 0, color: "var(--primary)", textDecoration: "underline" }}
-                            >
-                              상세페이지 보기
-                            </button>
-                          )}
-                          {product.source_url && (
-                            <a
-                              href={product.source_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              style={{ fontSize: 12, color: "var(--muted-foreground)", textDecoration: "underline" }}
-                            >
-                              신상마켓
-                            </a>
-                          )}
                         </div>
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
+                        <div className="product-info">
+                          <small>{product.market || "신상마켓"}</small>
+                          <h3>{cleanTitle(product.title) || product.title}</h3>
+                          <p>
+                            {product.sale_price ? `${won.format(product.sale_price)}원` : "판매가 미설정"}
+                            <span>도매 {won.format(product.wholesale_price)}원</span>
+                          </p>
+                          <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                            <button
+                              onClick={() => {
+                                setActiveId(product.id);
+                                if (!picked) setSelected((v) => [...v, product.id]);
+                                setStep(1);
+                              }}
+                              style={{ fontSize: 12, background: "none", border: 0, padding: 0, color: "var(--muted-foreground)", textDecoration: "underline" }}
+                            >
+                              사진·문구 넣기
+                            </button>
+                            {product.detail_html && (
+                              <button
+                                onClick={() => setSheet({ title: cleanTitle(product.title) || product.title, html: product.detail_html! })}
+                                style={{ fontSize: 12, background: "none", border: 0, padding: 0, color: "var(--primary)", textDecoration: "underline" }}
+                              >
+                                상세페이지 보기
+                              </button>
+                            )}
+                            {product.source_url && (
+                              <a href={product.source_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "var(--muted-foreground)", textDecoration: "underline" }}>
+                                신상마켓
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              </>
             )}
           </>
         )}
