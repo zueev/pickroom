@@ -21,6 +21,8 @@ export default function Home() {
   const [cafe24, setCafe24] = useState<Cafe24State>({ configured: false, connected: false, mallId: null });
   const [form, setForm] = useState({ mallId: "", clientId: "", clientSecret: "" });
   const [preview, setPreview] = useState("");
+  const [loaded, setLoaded] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
 
   const chosen = products.filter((p) => selected.includes(p.id));
   const current = products.find((p) => p.id === activeId) || chosen[0] || products[0];
@@ -28,18 +30,31 @@ export default function Home() {
   /* ---------- 자료 읽기 ---------- */
 
   const load = useCallback(async () => {
-    const response = await fetch("/api/products");
-    const body = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      setNotice(body.error || "상품을 불러오지 못했습니다.");
-      return;
+    setLoadFailed(false);
+    // 배포 직후 첫 요청이 한 번 튕기는 일이 있다. 조용히 비어 보이지 않도록
+    // 두 번까지 다시 시도하고, 그래도 실패하면 다시 불러올 수 있게 둔다.
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const response = await fetch("/api/products");
+        const body = await response.json().catch(() => ({}));
+        if (response.ok) {
+          setProducts(body.products as Product[]);
+          const grouped: Record<string, Photo[]> = {};
+          (body.photos as Photo[]).forEach((photo) => {
+            grouped[photo.product_id] = [...(grouped[photo.product_id] || []), photo];
+          });
+          setPhotos(grouped);
+          setLoaded(true);
+          return;
+        }
+        if (attempt === 2) setNotice(body.error || "상품을 불러오지 못했습니다.");
+      } catch {
+        if (attempt === 2) setNotice("상품을 불러오지 못했습니다.");
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1200));
     }
-    setProducts(body.products as Product[]);
-    const grouped: Record<string, Photo[]> = {};
-    (body.photos as Photo[]).forEach((photo) => {
-      grouped[photo.product_id] = [...(grouped[photo.product_id] || []), photo];
-    });
-    setPhotos(grouped);
+    setLoadFailed(true);
+    setLoaded(true);
   }, []);
 
   /* ---------- 상품 수정 ---------- */
@@ -207,8 +222,22 @@ export default function Home() {
 
             {products.length === 0 ? (
               <div className="pending-preview">
-                <b>아직 가져온 옷이 없습니다</b>
-                <span>신상마켓에서 상품을 가져오면 여기에 뜹니다</span>
+                {!loaded ? (
+                  <b>불러오는 중</b>
+                ) : loadFailed ? (
+                  <>
+                    <b>상품을 불러오지 못했습니다</b>
+                    <span>잠깐 끊긴 것일 수 있습니다</span>
+                    <button className="primary" onClick={load} style={{ marginTop: 14, maxWidth: 200 }}>
+                      다시 불러오기
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <b>아직 가져온 옷이 없습니다</b>
+                    <span>신상마켓에서 상품을 가져오면 여기에 뜹니다</span>
+                  </>
+                )}
               </div>
             ) : (
               <div className="product-grid">
