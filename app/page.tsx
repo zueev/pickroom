@@ -57,6 +57,25 @@ export default function Home() {
     setLoaded(true);
   }, []);
 
+  useEffect(() => {
+    load();
+
+    fetch("/api/cafe24/settings")
+      .then((r) => r.json())
+      .then((body) => {
+        if (!body.error) setCafe24(body);
+        if (body.mallId) setForm((f) => ({ ...f, mallId: body.mallId }));
+      })
+      .catch(() => undefined);
+
+    const params = new URLSearchParams(window.location.search);
+    const state = params.get("cafe24");
+    if (state === "connected") setNotice("카페24가 연결됐습니다.");
+    if (state === "error") setNotice(`카페24 연결 실패: ${params.get("detail") || ""}`);
+    if (state === "not-configured") setNotice("카페24 앱 정보를 먼저 저장해 주세요.");
+    if (state) window.history.replaceState({}, "", "/");
+  }, [load]);
+
   /* ---------- 상품 수정 ---------- */
 
   async function patch(id: string, values: Partial<Product>) {
