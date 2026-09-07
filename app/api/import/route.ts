@@ -38,6 +38,8 @@ export async function POST(request: Request) {
     const body = (await request.json()) as {
       gid?: string;
       images?: string[];
+      image?: { data?: string; type?: string };
+      sort?: number;
       detailText?: string;
       replace?: boolean;
     };
@@ -67,6 +69,24 @@ export async function POST(request: Request) {
         await admin.storage.from("photos").remove(old.map((row) => row.path));
         await admin.from("product_photos").delete().eq("product_id", product.id);
       }
+    }
+
+    // 신상마켓 이미지 서버가 외부 요청을 막는다(455). 그래서 브라우저가 받아둔
+    // 바이트를 그대로 넘겨받는 길을 둔다. 한 장씩 보내 요청 크기 제한을 피한다.
+    if (body.image?.data) {
+      const type = body.image.type || "image/jpeg";
+      if (!type.startsWith("image/")) throw new Error("이미지가 아닙니다.");
+      const buffer = Buffer.from(body.image.data, "base64");
+      if (buffer.byteLength > MAX_BYTES) throw new Error("사진이 너무 큽니다.");
+
+      const sort = Number.isFinite(body.sort) ? Number(body.sort) : 1;
+      const path = `${product.id}/sinsang-${Date.now()}-${sort}.${extensionFor(type)}`;
+      const upload = await admin.storage.from("photos")
+        .upload(path, buffer, { contentType: type, upsert: false });
+      if (upload.error) throw new Error(upload.error.message);
+      await admin.from("product_photos")
+        .insert({ product_id: product.id, path, sort });
+      return cors(NextResponse.json({ ok: true, gid, saved: 1 }));
     }
 
     const saved: string[] = [];
