@@ -3,7 +3,8 @@ import { GATE_COOKIE, expectedToken, sameToken } from "./lib/gate";
 
 export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
-  const open = path.startsWith("/gate") || path.startsWith("/api/gate");
+  // 수집 엔드포인트는 쿠키가 아니라 헤더 열쇠로 스스로 막는다.
+  const open = path.startsWith("/gate") || path.startsWith("/api/gate") || path.startsWith("/api/import");
   if (open) return NextResponse.next();
 
   let allowed = false;
