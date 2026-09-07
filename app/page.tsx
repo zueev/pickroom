@@ -23,6 +23,7 @@ export default function Home() {
   const [preview, setPreview] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
+  const [sheet, setSheet] = useState<{ title: string; html: string } | null>(null);
 
   const chosen = products.filter((p) => selected.includes(p.id));
   const current = products.find((p) => p.id === activeId) || chosen[0] || products[0];
@@ -136,11 +137,20 @@ export default function Home() {
     setBusy(false);
   }
 
-  function makePreview(product: Product) {
+  function makeDetail(product: Product) {
     const urls = (photos[product.id] || []).map((photo) => photo.url).filter(Boolean) as string[];
+    if (!urls.length) {
+      setNotice("사진이 있어야 상세페이지를 만들 수 있습니다.");
+      return null;
+    }
     const html = buildDetailHtml(product, urls);
-    setPreview(html);
-    patch(product.id, { detail_html: html, status: urls.length ? "ready" : "draft" });
+    patch(product.id, { detail_html: html, status: "ready" });
+    return html;
+  }
+
+  function makePreview(product: Product) {
+    const html = makeDetail(product);
+    if (html) setPreview(html);
   }
 
   /* ---------- 카페24 ---------- */
@@ -306,12 +316,11 @@ export default function Home() {
                         <button
                           className="image-edit"
                           onClick={() => {
-                            setActiveId(product.id);
-                            if (!picked) setSelected((v) => [...v, product.id]);
-                            setStep(1);
+                            const html = makeDetail(product);
+                            if (html) setSheet({ title: cleanTitle(product.title) || product.title, html });
                           }}
                         >
-                          사진·문구 넣기
+                          상세페이지 생성
                         </button>
                       </div>
                       <div className="product-info">
@@ -321,16 +330,36 @@ export default function Home() {
                           {product.sale_price ? `${won.format(product.sale_price)}원` : "판매가 미설정"}
                           <span>도매 {won.format(product.wholesale_price)}원</span>
                         </p>
-                        {product.source_url && (
-                          <a
-                            href={product.source_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            style={{ fontSize: 12, color: "var(--primary)", textDecoration: "underline" }}
+                        <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                          <button
+                            onClick={() => {
+                              setActiveId(product.id);
+                              if (!picked) setSelected((v) => [...v, product.id]);
+                              setStep(1);
+                            }}
+                            style={{ fontSize: 12, background: "none", border: 0, padding: 0, color: "var(--muted-foreground)", textDecoration: "underline" }}
                           >
-                            신상마켓에서 보기
-                          </a>
-                        )}
+                            사진·문구 넣기
+                          </button>
+                          {product.detail_html && (
+                            <button
+                              onClick={() => setSheet({ title: cleanTitle(product.title) || product.title, html: product.detail_html! })}
+                              style={{ fontSize: 12, background: "none", border: 0, padding: 0, color: "var(--primary)", textDecoration: "underline" }}
+                            >
+                              상세페이지 보기
+                            </button>
+                          )}
+                          {product.source_url && (
+                            <a
+                              href={product.source_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{ fontSize: 12, color: "var(--muted-foreground)", textDecoration: "underline" }}
+                            >
+                              신상마켓
+                            </a>
+                          )}
+                        </div>
                       </div>
                     </article>
                   );
@@ -566,6 +595,38 @@ export default function Home() {
         <div role="status" className="notice" onClick={() => setNotice("")}>
           {notice}
           <button aria-label="알림 닫기">×</button>
+        </div>
+      )}
+
+      {sheet && (
+        <div
+          style={{ position: "fixed", inset: 0, background: "rgba(15,17,22,.55)", zIndex: 70, display: "flex", flexDirection: "column", padding: "24px 16px" }}
+          onClick={() => setSheet(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ background: "#fff", borderRadius: 16, maxWidth: 900, width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", overflow: "hidden", height: "100%" }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "16px 20px", borderBottom: "1px solid var(--border)" }}>
+              <strong style={{ fontSize: 15, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {sheet.title}
+              </strong>
+              <button
+                onClick={() => { navigator.clipboard?.writeText(sheet.html); setNotice("상세페이지 HTML을 복사했습니다."); }}
+                style={{ fontSize: 13, background: "none", border: "1px solid var(--border)", borderRadius: 8, padding: "7px 12px" }}
+              >
+                HTML 복사
+              </button>
+              <button
+                onClick={() => setSheet(null)}
+                style={{ fontSize: 20, background: "none", border: 0, lineHeight: 1, padding: "0 4px" }}
+                aria-label="닫기"
+              >
+                ×
+              </button>
+            </div>
+            <iframe title="상세페이지" sandbox="" srcDoc={sheet.html} style={{ flex: 1, width: "100%", border: 0, background: "#fff" }} />
+          </div>
         </div>
       )}
 
