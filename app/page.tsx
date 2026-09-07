@@ -269,8 +269,23 @@ export default function Home() {
                         {cover?.url ? (
                           <img src={cover.url} alt={product.title} />
                         ) : (
-                          <div style={{ display: "grid", placeItems: "center", height: "100%", color: "#aaa", fontSize: 13 }}>
-                            실착 사진 없음
+                          <div
+                            style={{
+                              height: "100%", display: "flex", flexDirection: "column",
+                              justifyContent: "center", gap: 10, padding: "44px 18px 58px",
+                              textAlign: "left",
+                            }}
+                          >
+                            <strong style={{ fontSize: 15, lineHeight: 1.45, color: "var(--foreground)" }}>
+                              {cleanTitle(product.title) || product.title}
+                            </strong>
+                            <span style={{ fontSize: 13, color: "var(--muted-foreground)", lineHeight: 1.6 }}>
+                              {[product.colors, product.sizes].filter(Boolean).join(" · ")}
+                              {product.material ? <><br />{product.material}</> : null}
+                            </span>
+                            <span style={{ fontSize: 12, color: "var(--muted-foreground)", marginTop: 4 }}>
+                              실착 사진 자리
+                            </span>
                           </div>
                         )}
                         <div className="check-wrap">
@@ -306,6 +321,16 @@ export default function Home() {
                           {product.sale_price ? `${won.format(product.sale_price)}원` : "판매가 미설정"}
                           <span>도매 {won.format(product.wholesale_price)}원</span>
                         </p>
+                        {product.source_url && (
+                          <a
+                            href={product.source_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ fontSize: 12, color: "var(--primary)", textDecoration: "underline" }}
+                          >
+                            신상마켓에서 보기
+                          </a>
+                        )}
                       </div>
                     </article>
                   );
