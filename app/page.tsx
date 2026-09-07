@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase-browser";
 import { buildDetailHtml, cleanTitle, type Product } from "@/lib/detail";
+import { photoUrl } from "@/lib/config";
 
 type Photo = { id: string; product_id: string; path: string; sort: number; url?: string };
 type Cafe24State = { configured: boolean; connected: boolean; mallId: string | null };
@@ -33,16 +34,10 @@ export default function Home() {
   const loadPhotos = useCallback(async (ids: string[]) => {
     if (!ids.length) return;
     const { data } = await supabase.from("product_photos").select("*").in("product_id", ids).order("sort");
-    const rows = (data || []) as Photo[];
-    const signed = await Promise.all(
-      rows.map(async (row) => {
-        const { data: file } = await supabase.storage.from("photos").createSignedUrl(row.path, 3600);
-        return { ...row, url: file?.signedUrl };
-      }),
-    );
+    const rows = ((data || []) as Photo[]).map((row) => ({ ...row, url: photoUrl(row.path) }));
     setPhotos(() => {
       const next: Record<string, Photo[]> = {};
-      signed.forEach((row) => {
+      rows.forEach((row) => {
         next[row.product_id] = [...(next[row.product_id] || []), row];
       });
       return next;
@@ -339,7 +334,25 @@ export default function Home() {
             <div className="editor-fields">
               <span className="eyebrow">DETAIL STUDIO</span>
               <h2>어떻게 소개할까요?</h2>
-              <p>{current.vendor} · 도매 {won.format(current.wholesale_price)}원</p>
+              <p>
+                {current.vendor} · 도매 {won.format(current.wholesale_price)}원
+                {current.single_buy === false && " · 낱장 불가(매장 문의)"}
+              </p>
+
+              {current.sale_price ? (
+                <p style={{ fontSize: 13, color: "var(--muted-foreground)", margin: "-6px 0 14px" }}>
+                  매입 {won.format(Math.round(current.wholesale_price * 1.1))}원 · 수수료 6%{" "}
+                  {won.format(Math.round(current.sale_price * 0.06))}원 → 순마진{" "}
+                  <b style={{ color: "var(--foreground)" }}>
+                    {won.format(
+                      current.sale_price -
+                        Math.round(current.wholesale_price * 1.1) -
+                        Math.round(current.sale_price * 0.06),
+                    )}
+                    원
+                  </b>
+                </p>
+              ) : null}
 
               <label>
                 상품명
@@ -383,6 +396,13 @@ export default function Home() {
                   </button>
                 ))}
               </div>
+
+              {current.reel_idea && (
+                <div className="demo-note" style={{ margin: "4px 0 16px" }}>
+                  <span className="dot" />
+                  <p>{current.reel_idea}</p>
+                </div>
+              )}
 
               <button className="primary full" onClick={() => makePreview(current)}>
                 상세페이지 만들기

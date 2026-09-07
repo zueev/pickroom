@@ -12,3 +12,8 @@ export function appOrigin() {
   if (process.env.VERCEL_PROJECT_PRODUCTION_URL) return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
   return "http://localhost:3000";
 }
+
+/** 실착 사진의 공개 주소. 서명 주소와 달리 만료되지 않아 상세페이지에 안전하다. */
+export function photoUrl(path: string) {
+  return `${SUPABASE_URL}/storage/v1/object/public/photos/${path}`;
+}

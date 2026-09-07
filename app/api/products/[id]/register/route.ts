@@ -3,8 +3,7 @@ import { requireOwner } from "@/lib/supabase-server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { cafe24Fetch, loadConnection } from "@/lib/cafe24";
 import { buildDetailHtml, cleanTitle, type Product } from "@/lib/detail";
-
-const PHOTO_TTL = 60 * 60;
+import { photoUrl } from "@/lib/config";
 
 function madeInCode(origin: string | null) {
   if (!origin) return "KR";
@@ -56,16 +55,13 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       return NextResponse.json({ error: "실착 사진을 한 장 이상 올려 주세요." }, { status: 400 });
     }
 
-    const signed = await Promise.all(
-      photos.map(async (photo: { path: string }) => {
-        const { data } = await admin.storage.from("photos").createSignedUrl(photo.path, PHOTO_TTL);
-        return data?.signedUrl ?? "";
-      }),
-    );
-    const photoUrls = signed.filter(Boolean);
-    if (!photoUrls.length) throw new Error("실착 사진 주소를 만들지 못했습니다.");
+    // 상세페이지에는 만료되지 않는 공개 주소를 쓴다. 서명 주소를 넣으면
+    // 카페24 상세페이지의 사진이 얼마 뒤 깨진다.
+    const photoUrls = photos.map((photo: { path: string }) => photoUrl(photo.path));
 
-    const detailHtml = product.detail_html?.trim() || buildDetailHtml(product as Product, photoUrls);
+    // 화면에서 만들어 둔 초안이 있어도 여기서 다시 만든다. 저장된 초안이
+    // 옛 주소를 담고 있을 수 있다.
+    const detailHtml = buildDetailHtml(product as Product, photoUrls);
     const name = cleanTitle(product.title) || product.title;
     const set = options(product as Product);
 
