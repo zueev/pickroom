@@ -42,14 +42,55 @@ export async function POST(request: Request) {
       sort?: number;
       detailText?: string;
       replace?: boolean;
+      product?: {
+        title?: string;
+        vendor?: string;
+        wholesalePrice?: number;
+        colors?: string;
+        sizes?: string;
+        material?: string;
+        origin?: string;
+        singleBuy?: boolean;
+      };
     };
     const gid = String(body.gid || "").trim();
     if (!gid) throw new Error("상품번호가 없습니다.");
 
     const admin = supabaseAdmin();
-    const { data: product, error } = await admin
+    let { data: product, error } = await admin
       .from("products").select("id").eq("gid", gid).maybeSingle();
     if (error) throw new Error(error.message);
+
+    // 신상마켓 화면에서 딴 자료로 상품을 만들거나 최신 값으로 고쳐 둔다.
+    if (body.product?.title) {
+      const info = body.product;
+      const title = String(info.title || "");
+      const price = Number(info.wholesalePrice) || 0;
+      const values = {
+        gid,
+        title: title.replace(/\s+/g, " ").trim().slice(0, 200),
+        source_url: `${ORIGIN}/goods/${gid}/0`,
+        vendor: (info.vendor || "").trim().slice(0, 120) || null,
+        wholesale_price: price,
+        colors: (info.colors || "").trim().slice(0, 200) || null,
+        sizes: (info.sizes || "").trim().slice(0, 100) || null,
+        material: (info.material || "").trim().slice(0, 200) || null,
+        origin: (info.origin || "").trim().slice(0, 60) || "대한민국",
+        single_buy: typeof info.singleBuy === "boolean" ? info.singleBuy : null,
+      };
+
+      if (product) {
+        const updated = await admin.from("products").update(values).eq("id", product.id);
+        if (updated.error) throw new Error(updated.error.message);
+      } else {
+        const created = await admin.from("products")
+          .insert({ ...values, sale_price: price > 0 ? Math.round((price * 2.2) / 100) * 100 : null })
+          .select("id").single();
+        if (created.error) throw new Error(created.error.message);
+        product = created.data;
+      }
+    }
+
     if (!product) throw new Error(`픽룸에 없는 상품번호입니다: ${gid}`);
 
     if (body.detailText && body.detailText.trim().length > 10) {
