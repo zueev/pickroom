@@ -25,6 +25,7 @@ export default function Home() {
   const [cafe24, setCafe24] = useState<Cafe24State>({ configured: false, connected: false, mallId: null });
   const [form, setForm] = useState({ mallId: "", clientId: "", clientSecret: "" });
   const [preview, setPreview] = useState("");
+  const [me, setMe] = useState<{ email: string | null; owner: boolean } | null>(null);
 
   const chosen = products.filter((p) => selected.includes(p.id));
   const current = products.find((p) => p.id === activeId) || chosen[0] || products[0];
@@ -57,6 +58,7 @@ export default function Home() {
 
   useEffect(() => {
     load();
+    fetch("/api/me").then((r) => r.json()).then(setMe).catch(() => undefined);
     fetch("/api/cafe24/settings")
       .then((r) => r.json())
       .then((body) => {
@@ -193,7 +195,18 @@ export default function Home() {
           ))}
         </nav>
 
-        {!cafe24.connected && (
+        {me && !me.owner && (
+          <div className="demo-note">
+            <span className="dot" />
+            <p>
+              <b>{me.email}</b> 은 이 작업실에 등록된 주소가 아닙니다. 그래서 옷이 보이지 않습니다.
+              Supabase의 <code>app_owner</code> 표에 이 주소를 넣거나, 등록된 주소로 다시 로그인하세요.
+            </p>
+            <button onClick={signOut}>다른 주소로 로그인</button>
+          </div>
+        )}
+
+        {me?.owner && !cafe24.connected && (
           <div className="demo-note">
             <span className="dot" />
             <p>
