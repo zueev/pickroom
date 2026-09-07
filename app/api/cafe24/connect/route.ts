@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { requireOwner } from "@/lib/supabase-server";
+import { isOpen } from "@/lib/gate";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { CAFE24_SCOPE, loadConnection } from "@/lib/cafe24";
 import { appOrigin } from "@/lib/config";
 
 export async function GET() {
-  if (!(await requireOwner())) return NextResponse.redirect(`${appOrigin()}/login`);
+  if (!(await isOpen())) return NextResponse.redirect(`${appOrigin()}/login`);
   const connection = await loadConnection();
   if (!connection) return NextResponse.redirect(`${appOrigin()}/?cafe24=not-configured`);
 

@@ -1,9 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { supabaseBrowser } from "@/lib/supabase-browser";
+import { useCallback, useEffect, useState } from "react";
 import { buildDetailHtml, cleanTitle, type Product } from "@/lib/detail";
-import { photoUrl } from "@/lib/config";
 
 type Photo = { id: string; product_id: string; path: string; sort: number; url?: string };
 type Cafe24State = { configured: boolean; connected: boolean; mallId: string | null };
@@ -12,8 +10,6 @@ const won = new Intl.NumberFormat("ko-KR");
 const STEPS = ["상품 고르기", "실착 사진과 문구", "카페24로 보내기"];
 
 export default function Home() {
-  const supabase = useMemo(() => supabaseBrowser(), []);
-
   const [products, setProducts] = useState<Product[]>([]);
   const [photos, setPhotos] = useState<Record<string, Photo[]>>({});
   const [selected, setSelected] = useState<string[]>([]);
@@ -25,62 +21,40 @@ export default function Home() {
   const [cafe24, setCafe24] = useState<Cafe24State>({ configured: false, connected: false, mallId: null });
   const [form, setForm] = useState({ mallId: "", clientId: "", clientSecret: "" });
   const [preview, setPreview] = useState("");
-  const [me, setMe] = useState<{ email: string | null; owner: boolean } | null>(null);
-  const [newPassword, setNewPassword] = useState("");
 
   const chosen = products.filter((p) => selected.includes(p.id));
   const current = products.find((p) => p.id === activeId) || chosen[0] || products[0];
 
   /* ---------- 자료 읽기 ---------- */
 
-  const loadPhotos = useCallback(async (ids: string[]) => {
-    if (!ids.length) return;
-    const { data } = await supabase.from("product_photos").select("*").in("product_id", ids).order("sort");
-    const rows = ((data || []) as Photo[]).map((row) => ({ ...row, url: photoUrl(row.path) }));
-    setPhotos(() => {
-      const next: Record<string, Photo[]> = {};
-      rows.forEach((row) => {
-        next[row.product_id] = [...(next[row.product_id] || []), row];
-      });
-      return next;
-    });
-  }, [supabase]);
-
   const load = useCallback(async () => {
-    const { data, error } = await supabase.from("products").select("*").order("created_at", { ascending: false });
-    if (error) {
-      setNotice(`상품을 불러오지 못했습니다: ${error.message}`);
+    const response = await fetch("/api/products");
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      setNotice(body.error || "상품을 불러오지 못했습니다.");
       return;
     }
-    const rows = (data || []) as Product[];
-    setProducts(rows);
-    await loadPhotos(rows.map((row) => row.id));
-  }, [supabase, loadPhotos]);
-
-  useEffect(() => {
-    load();
-    fetch("/api/me").then((r) => r.json()).then(setMe).catch(() => undefined);
-    fetch("/api/cafe24/settings")
-      .then((r) => r.json())
-      .then((body) => {
-        if (!body.error) setCafe24(body);
-        if (body.mallId) setForm((f) => ({ ...f, mallId: body.mallId }));
-      })
-      .catch(() => undefined);
-
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("cafe24") === "connected") setNotice("카페24가 연결됐습니다.");
-    if (params.get("cafe24") === "error") setNotice(`카페24 연결 실패: ${params.get("detail") || ""}`);
-    if (params.get("cafe24") === "not-configured") setNotice("카페24 앱 정보를 먼저 저장해 주세요.");
-    if (params.get("cafe24")) window.history.replaceState({}, "", "/");
-  }, [load]);
+    setProducts(body.products as Product[]);
+    const grouped: Record<string, Photo[]> = {};
+    (body.photos as Photo[]).forEach((photo) => {
+      grouped[photo.product_id] = [...(grouped[photo.product_id] || []), photo];
+    });
+    setPhotos(grouped);
+  }, []);
 
   /* ---------- 상품 수정 ---------- */
 
   async function patch(id: string, values: Partial<Product>) {
     setProducts((rows) => rows.map((row) => (row.id === id ? { ...row, ...values } : row)));
-    const { error } = await supabase.from("products").update(values).eq("id", id);
-    if (error) setNotice(`저장하지 못했습니다: ${error.message}`);
+    const response = await fetch(`/api/products/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(values),
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      setNotice(body.error || "저장하지 못했습니다.");
+    }
   }
 
   async function upload(file: File | undefined, productId: string) {
@@ -89,25 +63,42 @@ export default function Home() {
     if (file.size > 10 * 1024 * 1024) return setNotice("10MB 이하 이미지를 선택해 주세요.");
 
     setBusy(true);
-    const extension = (file.name.split(".").pop() || "jpg").toLowerCase();
-    const path = `${productId}/${Date.now()}.${extension}`;
-    const { error } = await supabase.storage.from("photos").upload(path, file, { contentType: file.type });
-    if (error) {
+    try {
+      const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+      const signed = await fetch("/api/photos/sign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productId, ext }),
+      }).then((r) => r.json());
+      if (signed.error) throw new Error(signed.error);
+
+      const put = await fetch(signed.signedUrl, {
+        method: "PUT",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+      if (!put.ok) throw new Error("사진을 올리지 못했습니다.");
+
+      const saved = await fetch("/api/photos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productId, path: signed.path }),
+      }).then((r) => r.json());
+      if (saved.error) throw new Error(saved.error);
+
+      await load();
+      setNotice("실착 사진을 올렸습니다.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "사진을 올리지 못했습니다.");
+    } finally {
       setBusy(false);
-      return setNotice(`사진을 올리지 못했습니다: ${error.message}`);
     }
-    const sort = (photos[productId]?.length || 0) + 1;
-    await supabase.from("product_photos").insert({ product_id: productId, path, sort });
-    await loadPhotos(products.map((row) => row.id));
-    setBusy(false);
-    setNotice("실착 사진을 올렸습니다.");
   }
 
   async function removePhoto(photo: Photo) {
     setBusy(true);
-    await supabase.storage.from("photos").remove([photo.path]);
-    await supabase.from("product_photos").delete().eq("id", photo.id);
-    await loadPhotos(products.map((row) => row.id));
+    await fetch(`/api/photos/${photo.id}`, { method: "DELETE" });
+    await load();
     setBusy(false);
   }
 
@@ -147,20 +138,9 @@ export default function Home() {
     load();
   }
 
-  async function savePassword(event: React.FormEvent) {
-    event.preventDefault();
-    if (newPassword.length < 8) return setNotice("비밀번호는 8자 이상으로 정해 주세요.");
-    setBusy(true);
-    const { error } = await supabase.auth.updateUser({ password: newPassword });
-    setBusy(false);
-    if (error) return setNotice(`비밀번호를 바꾸지 못했습니다: ${error.message}`);
-    setNewPassword("");
-    setNotice("비밀번호를 정했습니다. 다음부터는 메일 없이 들어오시면 됩니다.");
-  }
-
   async function signOut() {
-    await supabase.auth.signOut();
-    window.location.href = "/login";
+    await fetch("/api/gate", { method: "DELETE" });
+    window.location.href = "/gate";
   }
 
   /* ---------- 화면 ---------- */
@@ -207,18 +187,7 @@ export default function Home() {
           ))}
         </nav>
 
-        {me && !me.owner && (
-          <div className="demo-note">
-            <span className="dot" />
-            <p>
-              <b>{me.email}</b> 은 이 작업실에 등록된 주소가 아닙니다. 그래서 옷이 보이지 않습니다.
-              Supabase의 <code>app_owner</code> 표에 이 주소를 넣거나, 등록된 주소로 다시 로그인하세요.
-            </p>
-            <button onClick={signOut}>다른 주소로 로그인</button>
-          </div>
-        )}
-
-        {me?.owner && !cafe24.connected && (
+        {!cafe24.connected && (
           <div className="demo-note">
             <span className="dot" />
             <p>
@@ -574,24 +543,6 @@ export default function Home() {
                 카페24 로그인
               </a>
             )}
-
-            <div style={{ borderTop: "1px solid var(--border)", margin: "22px 0 0", paddingTop: 20 }}>
-              <h3 style={{ margin: "0 0 6px", fontSize: 15 }}>비밀번호</h3>
-              <p style={{ margin: "0 0 14px", fontSize: 13, color: "var(--muted-foreground)" }}>
-                정해두면 다음부터 메일 링크 없이 바로 들어옵니다.
-              </p>
-              <form onSubmit={savePassword}>
-                <input
-                  type="password"
-                  autoComplete="new-password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="8자 이상"
-                  style={{ width: "100%", padding: 12, marginBottom: 12, border: "1px solid var(--input)", borderRadius: 10 }}
-                />
-                <button className="primary full" type="submit" disabled={busy}>비밀번호 정하기</button>
-              </form>
-            </div>
 
             <button className="primary full" onClick={() => setDialog(false)} style={{ marginTop: 10, background: "transparent", color: "var(--muted-foreground)", border: "1px solid var(--border)" }}>
               닫기

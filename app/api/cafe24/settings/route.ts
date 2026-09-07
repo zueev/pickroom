@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { requireOwner } from "@/lib/supabase-server";
+import { isOpen } from "@/lib/gate";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { loadConnection } from "@/lib/cafe24";
 
 export async function GET() {
-  if (!(await requireOwner())) return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
+  if (!(await isOpen())) return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
   try {
     const connection = await loadConnection();
     return NextResponse.json({
@@ -18,7 +18,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  if (!(await requireOwner())) return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
+  if (!(await isOpen())) return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
   try {
     const body = (await request.json()) as { mallId?: string; clientId?: string; clientSecret?: string };
     const mallId = (body.mallId || "").trim().toLowerCase();

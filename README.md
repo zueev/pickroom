@@ -1,7 +1,7 @@
 # 픽룸
 
 신상마켓에서 가져온 옷에 **직접 입고 찍은 사진**을 붙여 카페24에 올리는 개인 작업실입니다.
-주소를 아는 사람이 아니라 **등록된 이메일 한 개만** 들어올 수 있습니다.
+**암구호**를 아는 사람만 들어올 수 있습니다. 로그인도 메일도 없습니다.
 
 - 주소: https://pickroom.vercel.app
 - 흐름: 옷 고르기 → 실착 사진·문구 → 상세페이지 생성 → 카페24 등록
@@ -11,17 +11,23 @@
 | | |
 |---|---|
 | 화면·서버 | Next.js (Vercel) |
-| 자료·사진·로그인 | Supabase (서울 리전) |
+| 자료·사진 | Supabase (서울 리전) |
 | 등록 | 카페24 Admin API (`mall.read_product`, `mall.write_product`) |
 
-카페24 토큰은 `cafe24_connection` 테이블에 있고 RLS 정책이 하나도 없어 **서버 라우트만** 읽습니다.
-상품과 사진은 `app_owner`에 등록된 이메일로 로그인한 경우에만 열립니다.
+암구호를 맞히면 1년짜리 httpOnly 쿠키가 생기고, 그 기기에서는 다시 묻지 않습니다.
+암구호 자체는 쿠키에 담기지 않고 해시만 담깁니다.
+
+브라우저는 Supabase에 직접 닿지 않습니다. 모든 읽기·쓰기가 서버 라우트를 지나며,
+`middleware.ts`가 쿠키 없는 요청을 전부 막습니다. 카페24 토큰도 서버만 읽습니다.
+사진만 예외로 브라우저가 Supabase에 곧장 올리는데, 서버가 발급한 일회용 주소로만 됩니다
+(Vercel 함수의 요청 크기 제한에 폰 사진이 걸리기 때문).
 
 ## 환경변수 (Vercel)
 
 | 이름 | 값 |
 |---|---|
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Project Settings → API의 `service_role` 키 |
+| `PICKROOM_PASSPHRASE` | 들어갈 때 쓰는 암구호. 이걸 아는 사람만 들어옵니다 |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Project Settings → API의 secret 키 |
 | `APP_ORIGIN` | `https://pickroom.vercel.app` (없으면 Vercel 배포 주소를 씀) |
 
 Supabase 주소와 publishable 키는 브라우저에 실려 나가는 값이라 `lib/config.ts`에 두었습니다.

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireOwner } from "@/lib/supabase-server";
+import { isOpen } from "@/lib/gate";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { cafe24Fetch, loadConnection } from "@/lib/cafe24";
 import { buildDetailHtml, cleanTitle, type Product } from "@/lib/detail";
@@ -27,7 +27,7 @@ function options(product: Product) {
 }
 
 export async function POST(_: Request, { params }: { params: Promise<{ id: string }> }) {
-  if (!(await requireOwner())) return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
+  if (!(await isOpen())) return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
   const { id } = await params;
   const admin = supabaseAdmin();
 

@@ -1,38 +1,28 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createServerClient } from "@supabase/ssr";
-import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from "./lib/config";
+import { GATE_COOKIE, expectedToken, sameToken } from "./lib/gate";
 
 export async function middleware(request: NextRequest) {
-  let response = NextResponse.next({ request });
-
-  const supabase = createServerClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
-    cookies: {
-      getAll: () => request.cookies.getAll(),
-      setAll: (list) => {
-        list.forEach(({ name, value }) => request.cookies.set(name, value));
-        response = NextResponse.next({ request });
-        list.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
-      },
-    },
-  });
-
-  const { data } = await supabase.auth.getUser();
   const path = request.nextUrl.pathname;
-  const open = path.startsWith("/login") || path.startsWith("/auth");
+  const open = path.startsWith("/gate") || path.startsWith("/api/gate");
+  if (open) return NextResponse.next();
 
-  if (!data.user && !open) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    url.search = "";
-    return NextResponse.redirect(url);
+  let allowed = false;
+  try {
+    const value = request.cookies.get(GATE_COOKIE)?.value;
+    if (value) allowed = sameToken(value, await expectedToken());
+  } catch {
+    allowed = false;
   }
-  if (data.user && path.startsWith("/login")) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/";
-    url.search = "";
-    return NextResponse.redirect(url);
+
+  if (allowed) return NextResponse.next();
+
+  if (path.startsWith("/api/")) {
+    return NextResponse.json({ error: "암구호가 필요합니다." }, { status: 401 });
   }
-  return response;
+  const url = request.nextUrl.clone();
+  url.pathname = "/gate";
+  url.search = "";
+  return NextResponse.redirect(url);
 }
 
 export const config = {
