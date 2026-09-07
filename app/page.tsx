@@ -26,6 +26,7 @@ export default function Home() {
   const [form, setForm] = useState({ mallId: "", clientId: "", clientSecret: "" });
   const [preview, setPreview] = useState("");
   const [me, setMe] = useState<{ email: string | null; owner: boolean } | null>(null);
+  const [newPassword, setNewPassword] = useState("");
 
   const chosen = products.filter((p) => selected.includes(p.id));
   const current = products.find((p) => p.id === activeId) || chosen[0] || products[0];
@@ -146,6 +147,17 @@ export default function Home() {
     load();
   }
 
+  async function savePassword(event: React.FormEvent) {
+    event.preventDefault();
+    if (newPassword.length < 8) return setNotice("비밀번호는 8자 이상으로 정해 주세요.");
+    setBusy(true);
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    setBusy(false);
+    if (error) return setNotice(`비밀번호를 바꾸지 못했습니다: ${error.message}`);
+    setNewPassword("");
+    setNotice("비밀번호를 정했습니다. 다음부터는 메일 없이 들어오시면 됩니다.");
+  }
+
   async function signOut() {
     await supabase.auth.signOut();
     window.location.href = "/login";
@@ -161,7 +173,7 @@ export default function Home() {
         <a className="logo" href="/">pickroom<span>●</span></a>
         <span className="header-label">입어보고, 찍고, 올린다.</span>
         <button className="connection" onClick={() => setDialog(true)}>
-          <span className="dot" /> {cafe24.connected ? "카페24 연결됨" : "연결 설정"}
+          <span className="dot" /> {cafe24.connected ? "카페24 연결됨" : "설정"}
         </button>
       </header>
 
@@ -521,7 +533,7 @@ export default function Home() {
           onClick={() => setDialog(false)}
         >
           <div className="connection-dialog" onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 16, padding: 24, maxWidth: 460, width: "100%", maxHeight: "90vh", overflowY: "auto" }}>
-            <h2 style={{ margin: "0 0 6px", fontSize: 18 }}>카페24 연결</h2>
+            <h2 style={{ margin: "0 0 6px", fontSize: 18 }}>설정</h2>
             <p style={{ margin: "0 0 20px", fontSize: 14, color: "var(--muted-foreground)" }}>
               {cafe24.connected
                 ? `${cafe24.mallId} 쇼핑몰에 연결되어 있습니다.`
@@ -562,6 +574,24 @@ export default function Home() {
                 카페24 로그인
               </a>
             )}
+
+            <div style={{ borderTop: "1px solid var(--border)", margin: "22px 0 0", paddingTop: 20 }}>
+              <h3 style={{ margin: "0 0 6px", fontSize: 15 }}>비밀번호</h3>
+              <p style={{ margin: "0 0 14px", fontSize: 13, color: "var(--muted-foreground)" }}>
+                정해두면 다음부터 메일 링크 없이 바로 들어옵니다.
+              </p>
+              <form onSubmit={savePassword}>
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="8자 이상"
+                  style={{ width: "100%", padding: 12, marginBottom: 12, border: "1px solid var(--input)", borderRadius: 10 }}
+                />
+                <button className="primary full" type="submit" disabled={busy}>비밀번호 정하기</button>
+              </form>
+            </div>
 
             <button className="primary full" onClick={() => setDialog(false)} style={{ marginTop: 10, background: "transparent", color: "var(--muted-foreground)", border: "1px solid var(--border)" }}>
               닫기
