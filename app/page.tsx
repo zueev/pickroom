@@ -354,44 +354,63 @@ export default function Home() {
                     )}
                   </div>
                 ) : (
-                  <div className="product-grid">
-                    {shops.map((row) => (
-                      <article className="product" key={row.shop}>
+                  <ul style={{ listStyle: "none", margin: 0, padding: 0, border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden", background: "#fff" }}>
+                    {shops.map((row, i) => (
+                      <li
+                        key={row.shop}
+                        style={{
+                          display: "flex", alignItems: "center", gap: 14,
+                          padding: "12px 14px",
+                          borderTop: i === 0 ? "none" : "1px solid var(--border)",
+                        }}
+                      >
                         <button
                           onClick={() => { setShop(row.shop); window.scrollTo(0, 0); }}
-                          style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: 0, padding: 0 }}
+                          style={{
+                            flex: 1, display: "flex", alignItems: "center", gap: 14,
+                            background: "none", border: 0, padding: 0, textAlign: "left", minWidth: 0,
+                          }}
                         >
-                          <div className="product-image">
-                            {row.cover ? (
-                              <img src={row.cover} alt={row.shop} />
-                            ) : (
-                              <div style={{ display: "grid", placeItems: "center", height: "100%", color: "#bbb", fontSize: 13 }}>
-                                사진 없음
-                              </div>
-                            )}
-                            <span className="image-tag">{row.count}벌</span>
-                          </div>
-                          <div className="product-info">
-                            <small>{row.market || "신상마켓"}</small>
-                            <h3>{row.shop}</h3>
-                            <p>최신 상품 보기<span>→</span></p>
-                          </div>
-                        </button>
-                        <div style={{ padding: "0 18px 16px" }}>
-                          <button
-                            onClick={() => setShopEdit(
-                              row.id
-                                ? { id: row.id, name: row.shop, market: row.market, sourceUrl: row.sourceUrl, memo: row.memo }
-                                : { name: row.shop, market: row.market, sourceUrl: "", memo: "" },
-                            )}
-                            style={{ fontSize: 12, background: "none", border: 0, padding: 0, color: "var(--muted-foreground)", textDecoration: "underline" }}
+                          <span
+                            style={{
+                              width: 52, height: 52, flex: "0 0 52px", borderRadius: 10, overflow: "hidden",
+                              background: "var(--muted)", display: "grid", placeItems: "center",
+                              fontSize: 11, color: "var(--muted-foreground)",
+                            }}
                           >
-                            {row.id ? "거래처 정보 고치기" : "목록에 넣기"}
-                          </button>
-                        </div>
-                      </article>
+                            {row.cover ? (
+                              <img src={row.cover} alt={row.shop} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                            ) : "—"}
+                          </span>
+
+                          <span style={{ minWidth: 0, flex: 1 }}>
+                            <strong style={{ display: "block", fontSize: 15, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {row.shop}
+                            </strong>
+                            <span style={{ display: "block", fontSize: 12.5, color: "var(--muted-foreground)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {row.market || "매장 미입력"}
+                            </span>
+                          </span>
+
+                          <span style={{ fontSize: 13, color: row.count ? "var(--foreground)" : "var(--muted-foreground)", whiteSpace: "nowrap" }}>
+                            {row.count ? `${row.count}벌` : "0벌"}
+                          </span>
+                        </button>
+
+                        <button
+                          onClick={() => setShopEdit(
+                            row.id
+                              ? { id: row.id, name: row.shop, market: row.market, sourceUrl: row.sourceUrl, memo: row.memo }
+                              : { name: row.shop, market: row.market, sourceUrl: "", memo: "" },
+                          )}
+                          aria-label={`${row.shop} 고치기`}
+                          style={{ background: "none", border: 0, padding: "4px 2px", color: "var(--muted-foreground)", fontSize: 16, lineHeight: 1 }}
+                        >
+                          ⋯
+                        </button>
+                      </li>
                     ))}
-                  </div>
+                  </ul>
                 )}
               </>
             ) : (
