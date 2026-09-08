@@ -5,6 +5,15 @@ import { buildDetailHtml, cleanTitle, type Product } from "@/lib/detail";
 
 type Photo = { id: string; product_id: string; path: string; sort: number; url?: string };
 type Cafe24State = { configured: boolean; connected: boolean; mallId: string | null };
+type ShopRow = {
+  id: string;
+  name: string;
+  market: string | null;
+  source_url: string | null;
+  memo: string | null;
+  active: boolean;
+};
+type ShopDraft = { id?: string; name: string; market: string; sourceUrl: string; memo: string };
 
 const won = new Intl.NumberFormat("ko-KR");
 const STEPS = ["상품 고르기", "실착 사진과 문구", "카페24로 보내기"];
@@ -25,18 +34,44 @@ export default function Home() {
   const [loadFailed, setLoadFailed] = useState(false);
   const [sheet, setSheet] = useState<{ title: string; html: string } | null>(null);
   const [shop, setShop] = useState<string | null>(null);
+  const [shopRows, setShopRows] = useState<ShopRow[]>([]);
+  const [shopEdit, setShopEdit] = useState<ShopDraft | null>(null);
   const PER_SHOP = 15;
 
   const shops = (() => {
-    const map = new Map<string, { shop: string; market: string; count: number; cover?: string }>();
+    const counts = new Map<string, number>();
+    const covers = new Map<string, string>();
     products.forEach((p) => {
-      const key = p.shop || p.vendor || "기타";
-      const row = map.get(key) || { shop: key, market: p.market || "", count: 0 };
-      row.count += 1;
-      if (!row.cover) row.cover = (photos[p.id] || [])[0]?.url;
-      map.set(key, row);
+      const key = (p.shop || p.vendor || "기타").toLowerCase();
+      counts.set(key, (counts.get(key) || 0) + 1);
+      const cover = (photos[p.id] || [])[0]?.url;
+      if (cover && !covers.has(key)) covers.set(key, cover);
     });
-    return [...map.values()].sort((a, b) => b.count - a.count);
+
+    const rows = shopRows.map((row) => ({
+      id: row.id,
+      shop: row.name,
+      market: row.market || "",
+      sourceUrl: row.source_url || "",
+      memo: row.memo || "",
+      count: counts.get(row.name.toLowerCase()) || 0,
+      cover: covers.get(row.name.toLowerCase()),
+    }));
+
+    // 표에 없는 거래처의 상품도 묻히지 않게 한다
+    const known = new Set(rows.map((r) => r.shop.toLowerCase()));
+    products.forEach((p) => {
+      const name = p.shop || p.vendor || "기타";
+      const key = name.toLowerCase();
+      if (known.has(key)) return;
+      known.add(key);
+      rows.push({
+        id: "", shop: name, market: p.market || "", sourceUrl: "", memo: "",
+        count: counts.get(key) || 0, cover: covers.get(key),
+      });
+    });
+
+    return rows.sort((a, b) => b.count - a.count || a.shop.localeCompare(b.shop));
   })();
 
   const shown = shop
@@ -63,6 +98,10 @@ export default function Home() {
             grouped[photo.product_id] = [...(grouped[photo.product_id] || []), photo];
           });
           setPhotos(grouped);
+          fetch("/api/shops")
+            .then((r) => r.json())
+            .then((b) => { if (!b.error) setShopRows(b.shops as ShopRow[]); })
+            .catch(() => undefined);
           setLoaded(true);
           return;
         }
@@ -200,6 +239,31 @@ export default function Home() {
     load();
   }
 
+  async function saveShop(draft: ShopDraft) {
+    setBusy(true);
+    const body = { name: draft.name, market: draft.market, sourceUrl: draft.sourceUrl, memo: draft.memo };
+    const response = draft.id
+      ? await fetch(`/api/shops/${draft.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+      : await fetch("/api/shops", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const result = await response.json().catch(() => ({}));
+    setBusy(false);
+    if (!response.ok) return setNotice(result.error || "저장하지 못했습니다.");
+    setShopEdit(null);
+    setNotice(draft.id ? "거래처를 고쳤습니다." : "거래처를 넣었습니다.");
+    const refreshed = await fetch("/api/shops").then((r) => r.json()).catch(() => null);
+    if (refreshed?.shops) setShopRows(refreshed.shops as ShopRow[]);
+  }
+
+  async function removeShop(id: string) {
+    if (!window.confirm("이 거래처를 목록에서 지울까요? 상품은 그대로 남습니다.")) return;
+    setBusy(true);
+    await fetch(`/api/shops/${id}`, { method: "DELETE" });
+    setBusy(false);
+    setShopEdit(null);
+    const refreshed = await fetch("/api/shops").then((r) => r.json()).catch(() => null);
+    if (refreshed?.shops) setShopRows(refreshed.shops as ShopRow[]);
+  }
+
   async function signOut() {
     await fetch("/api/gate", { method: "DELETE" });
     window.location.href = "/gate";
@@ -267,6 +331,12 @@ export default function Home() {
               <>
                 <div className="section-bar">
                   <h2>거래처 <span>{String(shops.length).padStart(2, "0")}</span></h2>
+                  <button
+                    onClick={() => setShopEdit({ name: "", market: "", sourceUrl: "", memo: "" })}
+                    style={{ fontSize: 13, background: "none", border: "1px solid var(--border)", borderRadius: 999, padding: "7px 14px" }}
+                  >
+                    거래처 추가
+                  </button>
                 </div>
 
                 {shops.length === 0 ? (
@@ -307,6 +377,18 @@ export default function Home() {
                             <p>최신 상품 보기<span>→</span></p>
                           </div>
                         </button>
+                        <div style={{ padding: "0 18px 16px" }}>
+                          <button
+                            onClick={() => setShopEdit(
+                              row.id
+                                ? { id: row.id, name: row.shop, market: row.market, sourceUrl: row.sourceUrl, memo: row.memo }
+                                : { name: row.shop, market: row.market, sourceUrl: "", memo: "" },
+                            )}
+                            style={{ fontSize: 12, background: "none", border: 0, padding: 0, color: "var(--muted-foreground)", textDecoration: "underline" }}
+                          >
+                            {row.id ? "거래처 정보 고치기" : "목록에 넣기"}
+                          </button>
+                        </div>
                       </article>
                     ))}
                   </div>
@@ -638,6 +720,79 @@ export default function Home() {
         <div role="status" className="notice" onClick={() => setNotice("")}>
           {notice}
           <button aria-label="알림 닫기">×</button>
+        </div>
+      )}
+
+      {shopEdit && (
+        <div
+          style={{ position: "fixed", inset: 0, background: "rgba(15,17,22,.5)", zIndex: 65, display: "grid", placeItems: "center", padding: 20 }}
+          onClick={() => setShopEdit(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ background: "#fff", borderRadius: 16, padding: 24, maxWidth: 440, width: "100%", maxHeight: "90vh", overflowY: "auto" }}
+          >
+            <h2 style={{ margin: "0 0 6px", fontSize: 18 }}>{shopEdit.id ? "거래처 고치기" : "거래처 추가"}</h2>
+            <p style={{ margin: "0 0 20px", fontSize: 13, color: "var(--muted-foreground)" }}>
+              신상마켓 거래처 주소를 넣어두면 그 주소에서 상품을 가져옵니다.
+            </p>
+
+            <form onSubmit={(e) => { e.preventDefault(); saveShop(shopEdit); }}>
+              <label style={{ display: "block", fontSize: 13, marginBottom: 6 }}>거래처 이름</label>
+              <input
+                value={shopEdit.name}
+                onChange={(e) => setShopEdit({ ...shopEdit, name: e.target.value })}
+                placeholder="ASKHAKI 애즈카키"
+                required
+                style={{ width: "100%", padding: 12, marginBottom: 14, border: "1px solid var(--input)", borderRadius: 10 }}
+              />
+
+              <label style={{ display: "block", fontSize: 13, marginBottom: 6 }}>매장 · 위치</label>
+              <input
+                value={shopEdit.market}
+                onChange={(e) => setShopEdit({ ...shopEdit, market: e.target.value })}
+                placeholder="디오트 3층 i-28"
+                style={{ width: "100%", padding: 12, marginBottom: 14, border: "1px solid var(--input)", borderRadius: 10 }}
+              />
+
+              <label style={{ display: "block", fontSize: 13, marginBottom: 6 }}>신상마켓 주소 (선택)</label>
+              <input
+                value={shopEdit.sourceUrl}
+                onChange={(e) => setShopEdit({ ...shopEdit, sourceUrl: e.target.value })}
+                placeholder="https://sinsangmarket.kr/..."
+                inputMode="url"
+                style={{ width: "100%", padding: 12, marginBottom: 14, border: "1px solid var(--input)", borderRadius: 10 }}
+              />
+
+              <label style={{ display: "block", fontSize: 13, marginBottom: 6 }}>메모 (선택)</label>
+              <textarea
+                value={shopEdit.memo}
+                onChange={(e) => setShopEdit({ ...shopEdit, memo: e.target.value })}
+                rows={3}
+                placeholder="사진제공 되는 곳, 낱장 되는 곳처럼 기억할 것"
+                style={{ width: "100%", padding: 12, marginBottom: 18, border: "1px solid var(--input)", borderRadius: 10, fontSize: 14 }}
+              />
+
+              <button className="primary full" type="submit" disabled={busy}>저장</button>
+            </form>
+
+            {shopEdit.id && (
+              <button
+                onClick={() => removeShop(shopEdit.id!)}
+                style={{ display: "block", margin: "14px auto 0", background: "none", border: 0, color: "#c0392b", fontSize: 13, textDecoration: "underline" }}
+              >
+                이 거래처 지우기
+              </button>
+            )}
+
+            <button
+              onClick={() => setShopEdit(null)}
+              className="primary full"
+              style={{ marginTop: 10, background: "transparent", color: "var(--muted-foreground)", border: "1px solid var(--border)" }}
+            >
+              닫기
+            </button>
+          </div>
         </div>
       )}
 
